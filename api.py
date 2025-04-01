@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import Optional
 import asyncio
@@ -38,6 +39,82 @@ class TaskResponse(BaseModel):
     status: str
     result: str
     error: Optional[str] = None
+
+@app.get("/", response_class=HTMLResponse)
+async def root():
+    return """
+    <html>
+        <head>
+            <title>Browser Use API</title>
+            <style>
+                body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+                h1 { color: #333; }
+                .endpoint { background: #f5f5f5; padding: 20px; border-radius: 5px; margin: 20px 0; }
+                code { background: #e0e0e0; padding: 2px 5px; border-radius: 3px; }
+            </style>
+        </head>
+        <body>
+            <h1>🌐 Browser Use API</h1>
+            <p>Welcome to the Browser Use API. This API provides browser automation capabilities.</p>
+            
+            <div class="endpoint">
+                <h2>API Endpoints:</h2>
+                <p><code>POST /run-task</code> - Run a browser automation task</p>
+                <p><code>GET /ui</code> - Access the Gradio UI</p>
+            </div>
+            
+            <p>For more information, visit the <a href="/docs">API documentation</a>.</p>
+        </body>
+    </html>
+    """
+
+async def run_browser_task(
+    task: str,
+    api_key: str,
+    model: str = 'gpt-4o',
+    headless: bool = True,
+) -> str:
+    if not api_key.strip():
+        return 'Please provide an API key'
+
+    os.environ['OPENAI_API_KEY'] = api_key
+    
+    try:
+        agent = Agent(
+            task=task,
+            llm=ChatOpenAI(model=model),
+        )
+        result = await agent.run()
+        return str(result)
+    except Exception as e:
+        return f"Error occurred: {str(e)}"
+
+@app.post("/run-task", response_model=TaskResponse)
+async def run_task(request: TaskRequest):
+    try:
+        if request.api_key:
+            os.environ['OPENAI_API_KEY'] = request.api_key
+        elif not os.getenv('OPENAI_API_KEY'):
+            raise HTTPException(status_code=400, detail="OpenAI API key is required")
+
+        result = await run_browser_task(
+            task=request.task,
+            api_key=request.api_key or "",
+            model=request.model,
+            headless=request.headless
+        )
+
+        return TaskResponse(
+            status="success",
+            result=result
+        )
+
+    except Exception as e:
+        return TaskResponse(
+            status="error",
+            result="",
+            error=str(e)
+        )
 
 # Create Gradio interface
 def create_ui():
@@ -135,59 +212,9 @@ def create_ui():
         
         return interface
 
-async def run_browser_task(
-    task: str,
-    api_key: str,
-    model: str = 'gpt-4o',
-    headless: bool = True,
-) -> str:
-    if not api_key.strip():
-        return 'Please provide an API key'
-
-    os.environ['OPENAI_API_KEY'] = api_key
-    
-    try:
-        agent = Agent(
-            task=task,
-            llm=ChatOpenAI(model=model),
-        )
-        result = await agent.run()
-        return str(result)
-    except Exception as e:
-        return f"Error occurred: {str(e)}"
-
-@app.post("/run-task", response_model=TaskResponse)
-async def run_task(request: TaskRequest):
-    try:
-        if request.api_key:
-            os.environ['OPENAI_API_KEY'] = request.api_key
-        elif not os.getenv('OPENAI_API_KEY'):
-            raise HTTPException(status_code=400, detail="OpenAI API key is required")
-
-        result = await run_browser_task(
-            task=request.task,
-            api_key=request.api_key or "",
-            model=request.model,
-            headless=request.headless
-        )
-
-        return TaskResponse(
-            status="success",
-            result=result
-        )
-
-    except Exception as e:
-        return TaskResponse(
-            status="error",
-            result="",
-            error=str(e)
-        )
-
-# Create Gradio interface
+# Create and mount Gradio interface
 interface = create_ui()
-
-# Mount Gradio app
-app = gr.mount_gradio_app(app, interface, path="/")
+app = gr.mount_gradio_app(app, interface, path="/ui")
 
 # For local development
 if __name__ == "__main__":
