@@ -8,6 +8,6 @@ def handler(request):
             "Content-Type": "application/json"
         },
         "body": json.dumps({
-            "message": "Hello from Browser Use API"
+            "status": "healthy"
         })
     } 
