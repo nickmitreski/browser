@@ -183,9 +183,13 @@ async def run_task(request: TaskRequest):
             error=str(e)
         )
 
-# Mount Gradio app
-app = gr.mount_gradio_app(app, create_ui(), path="/")
+# Create Gradio interface
+interface = create_ui()
 
+# Mount Gradio app
+app = gr.mount_gradio_app(app, interface, path="/")
+
+# For local development
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000) 
